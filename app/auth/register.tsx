@@ -20,6 +20,7 @@ export default function RegisterScreen() {
   const [contrasena, setContrasena] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [registroExitoso, setRegistroExitoso] = useState(false);
   const { signUp } = useAuth();
 
   const handleRegister = async () => {
@@ -41,16 +42,7 @@ export default function RegisterScreen() {
     try {
       setLoading(true);
       await signUp(nombre, apellido, usuario, gmail, contrasena);
-      Alert.alert(
-        'Registro Exitoso',
-        'Tu cuenta ha sido creada exitosamente.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.replace('/(tabs)/income'),
-          },
-        ]
-      );
+      setRegistroExitoso(true);
     } catch (error: any) {
       console.error('Error inesperado:', error);
       Alert.alert('Error', error.message);
@@ -128,13 +120,27 @@ export default function RegisterScreen() {
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity 
-        style={styles.loginButton}
-        onPress={() => router.push('/auth/login')}
-        disabled={loading}
-      >
-        <Text style={styles.loginText}>¿Ya tienes cuenta? Inicia sesión</Text>
-      </TouchableOpacity>
+      {registroExitoso && (
+        <View style={styles.successContainer}>
+          <Text style={styles.successText}>Usuario registrado con éxito</Text>
+          <TouchableOpacity 
+            style={styles.loginRedirect}
+            onPress={() => router.replace('/auth/login')}
+          >
+            <Text style={styles.loginRedirectText}>¿Deseas iniciar sesión?</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {!registroExitoso && (
+        <TouchableOpacity 
+          style={styles.loginButton}
+          onPress={() => router.push('/auth/login')}
+          disabled={loading}
+        >
+          <Text style={styles.loginText}>¿Ya tienes cuenta? Inicia sesión</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -179,5 +185,23 @@ const styles = StyleSheet.create({
   loginText: {
     color: '#007AFF',
     textAlign: 'center',
+  },
+  successContainer: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  successText: {
+    color: '#4CAF50',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  loginRedirect: {
+    padding: 10,
+  },
+  loginRedirectText: {
+    color: '#007AFF',
+    fontSize: 16,
+    textDecorationLine: 'underline',
   },
 });

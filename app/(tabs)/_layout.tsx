@@ -1,7 +1,14 @@
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAuth } from '../../context/AuthContext';
 
 export default function TabLayout() {
+  const { user } = useAuth();
+
+  if (!user) {
+    return <Redirect href="/auth/login" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -15,56 +22,20 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="welcome"
-        options={{
-          title: 'Bienvenido',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="waving-hand" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Inicio',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="home" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="income"
         options={{
-          title: 'Ingresos',
+          title: '🔑 Login',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="attach-money" size={size} color={color} />
+            <MaterialIcons name="login" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="expenses"
+        name="welcome"
         options={{
-          title: 'Gastos',
+          title: '💰 Billetera',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="money-off" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="statistics"
-        options={{
-          title: 'Estadísticas',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="bar-chart" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="person" size={size} color={color} />
+            <MaterialIcons name="account-balance-wallet" size={size} color={color} />
           ),
         }}
       />

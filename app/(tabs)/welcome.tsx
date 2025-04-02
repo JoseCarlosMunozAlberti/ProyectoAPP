@@ -85,6 +85,7 @@ export default function WelcomeScreen() {
   const [menuAnimation] = useState(new Animated.Value(0));
   const [datosIngresos, setDatosIngresos] = useState<{ categoria: string; monto: number; color: string }[]>([]);
   const [datosEgresos, setDatosEgresos] = useState<{ categoria: string; monto: number; color: string }[]>([]);
+  const [montoError, setMontoError] = useState<string | null>(null);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -409,6 +410,16 @@ export default function WelcomeScreen() {
         ? saldo + montoNumerico 
         : saldo - montoNumerico;
 
+      // Verificar si hay suficiente saldo para el egreso
+      if (tipoSeleccionado === 'egreso' && montoNumerico > saldo) {
+        const diferencia = saldo - montoNumerico;
+        setMontoError(`${diferencia.toFixed(2)} (Saldo insuficiente)`);
+        setLoading(false);
+        return;
+      }
+
+      setMontoError(null); // Limpiar error si existe
+
       // Iniciar transacción
       const { error: transaccionError } = await supabase.rpc('crear_transaccion', {
         p_usuario_id: user?.id,
@@ -704,10 +715,16 @@ export default function WelcomeScreen() {
               style={styles.input}
               placeholder="Monto"
               value={monto}
-              onChangeText={setMonto}
+              onChangeText={(text) => {
+                setMonto(text);
+                setMontoError(null); // Limpiar error al cambiar el monto
+              }}
               keyboardType="numeric"
               placeholderTextColor="#999"
             />
+            {montoError && (
+              <Text style={styles.errorText}>${montoError}</Text>
+            )}
 
             <Text style={styles.sectionTitle}>Categoría</Text>
             {categoriasFiltradas.length === 0 ? (
@@ -1217,5 +1234,11 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  errorText: {
+    color: '#FF6B6B',
+    fontSize: 14,
+    marginTop: 5,
+    textAlign: 'center',
   },
 });
