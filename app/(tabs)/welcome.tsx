@@ -10,13 +10,16 @@ import {
   Alert,
   ActivityIndicator,
   Animated,
+  Dimensions,
+  ScrollView,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { supabase, TABLES } from '../../supabase';
 import type { Transaccion, Categoria } from '../../supabase';
+import { useRouter } from 'expo-router';
 
-type MaterialIconName = 'attach-money' | 'work' | 'business' | 'card-giftcard' | 'account-balance' | 'savings' | 'more-horiz' | 'add' | 'restaurant' | 'directions-car' | 'movie' | 'build' | 'shopping-cart';
+type MaterialIconName = 'attach-money' | 'work' | 'business' | 'card-giftcard' | 'account-balance' | 'savings' | 'more-horiz' | 'add' | 'restaurant' | 'directions-car' | 'movie' | 'build' | 'shopping-cart' | 'person' | 'logout';
 
 type CategoriaExtendida = Categoria & { 
   icono: MaterialIconName; 
@@ -65,8 +68,10 @@ const CATEGORIAS_DEFAULT = [
 ];
 
 export default function WelcomeScreen() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const router = useRouter();
   const [modalVisible, setModalVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   const [monto, setMonto] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [tipoSeleccionado, setTipoSeleccionado] = useState<TipoTransaccion>('ingreso');
@@ -77,6 +82,9 @@ export default function WelcomeScreen() {
   const [loading, setLoading] = useState(false);
   const [loadingDatos, setLoadingDatos] = useState(true);
   const [animation] = useState(new Animated.Value(0));
+  const [menuAnimation] = useState(new Animated.Value(0));
+  const [datosIngresos, setDatosIngresos] = useState<{ categoria: string; monto: number; color: string }[]>([]);
+  const [datosEgresos, setDatosEgresos] = useState<{ categoria: string; monto: number; color: string }[]>([]);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -226,6 +234,138 @@ export default function WelcomeScreen() {
     }
   };
 
+  const procesarTransacciones = () => {
+    const ingresosPorCategoria: { [key: string]: number } = {};
+    const egresosPorCategoria: { [key: string]: number } = {};
+
+    transacciones.forEach(transaccion => {
+      const categoria = transaccion.categorias.nombre;
+      const monto = transaccion.monto;
+
+      if (transaccion.tipo === 'ingreso') {
+        ingresosPorCategoria[categoria] = (ingresosPorCategoria[categoria] || 0) + monto;
+      } else {
+        egresosPorCategoria[categoria] = (egresosPorCategoria[categoria] || 0) + monto;
+      }
+    });
+
+    const coloresIngresos = ['#4CAF50', '#81C784', '#A5D6A7', '#C8E6C9', '#E8F5E9'];
+    const coloresEgresos = ['#FF6B6B', '#FF8A8A', '#FFA9A9', '#FFC8C8', '#FFE7E7'];
+
+    const datosIngresos = Object.entries(ingresosPorCategoria).map(([categoria, monto], index) => ({
+      categoria,
+      monto,
+      color: coloresIngresos[index % coloresIngresos.length],
+    }));
+
+    const datosEgresos = Object.entries(egresosPorCategoria).map(([categoria, monto], index) => ({
+      categoria,
+      monto,
+      color: coloresEgresos[index % coloresEgresos.length],
+    }));
+
+    setDatosIngresos(datosIngresos);
+    setDatosEgresos(datosEgresos);
+  };
+
+  useEffect(() => {
+    procesarTransacciones();
+  }, [transacciones]);
+
+  const renderGraficoExponencial = (datos: { categoria: string; monto: number; color: string }[], total: number) => {
+    const alturaGrafico = 200;
+    const anchoGrafico = Dimensions.get('window').width - 64; // Ancho de pantalla menos padding
+    const padding = 20;
+    const alturaUtil = alturaGrafico - (2 * padding);
+    const anchoUtil = anchoGrafico - (2 * padding);
+
+    // Ordenar datos de menor a mayor para efecto exponencial
+    const datosOrdenados = [...datos].sort((a, b) => a.monto - b.monto);
+    const maxMonto = Math.max(...datosOrdenados.map(d => d.monto));
+
+    // Función para calcular la posición Y exponencial
+    const calcularPosicionY = (monto: number) => {
+      const factor = Math.log(monto + 1) / Math.log(maxMonto + 1); // +1 para evitar log(0)
+      return alturaGrafico - (factor * alturaUtil) - padding;
+    };
+
+    return (
+      <View style={styles.graficoWrapper}>
+        <View style={[styles.graficoExponencial, { width: anchoGrafico, height: alturaGrafico }]}>
+          {/* Eje Y */}
+          <View style={[styles.ejeY, { height: alturaGrafico }]} />
+          
+          {/* Eje X */}
+          <View style={[styles.ejeX, { width: anchoGrafico, bottom: padding }]} />
+
+          {/* Líneas de datos */}
+          {datosOrdenados.map((item, index) => {
+            const x = (index + 1) * (anchoUtil / (datosOrdenados.length + 1)) + padding;
+            const y = calcularPosicionY(item.monto);
+
+            return (
+              <React.Fragment key={index}>
+                {/* Línea vertical desde eje X hasta el punto */}
+                <View
+                  style={[
+                    styles.lineaVertical,
+                    {
+                      height: alturaGrafico - y - padding,
+                      left: x,
+                      bottom: padding,
+                      backgroundColor: item.color,
+                    },
+                  ]}
+                />
+                
+                {/* Punto de datos */}
+                <View
+                  style={[
+                    styles.puntoDatos,
+                    {
+                      left: x - 6,
+                      top: y - 6,
+                      backgroundColor: item.color,
+                    },
+                  ]}
+                />
+
+                {/* Etiqueta de categoría */}
+                <Text
+                  style={[
+                    styles.etiquetaCategoria,
+                    {
+                      left: x - 40,
+                      bottom: 0,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {item.categoria}
+                </Text>
+              </React.Fragment>
+            );
+          })}
+        </View>
+
+        {/* Leyenda */}
+        <View style={styles.leyendaGrafico}>
+          {datosOrdenados.map((item, index) => (
+            <View key={index} style={styles.itemLeyenda}>
+              <View style={[styles.colorLeyenda, { backgroundColor: item.color }]} />
+              <Text style={styles.textoLeyenda}>
+                {item.categoria}: ${item.monto.toFixed(2)}
+              </Text>
+              <Text style={styles.porcentajeLeyenda}>
+                ({((item.monto / total) * 100).toFixed(1)}%)
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
   const handleOpenModal = () => {
     setModalVisible(true);
     Animated.spring(animation, {
@@ -325,15 +465,33 @@ export default function WelcomeScreen() {
     );
   };
 
-  const modalScale = animation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.9, 1]
-  });
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.replace('/auth/login');
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+      Alert.alert('Error', 'No se pudo cerrar la sesión');
+    }
+  };
 
-  const modalTranslateY = animation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [50, 0]
-  });
+  const toggleMenu = () => {
+    if (menuVisible) {
+      Animated.timing(menuAnimation, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => setMenuVisible(false));
+    } else {
+      setMenuVisible(true);
+      Animated.spring(menuAnimation, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 7
+      }).start();
+    }
+  };
 
   const categoriasFiltradas = categorias.filter(cat => cat.tipo === tipoSeleccionado);
   console.log('Tipo seleccionado:', tipoSeleccionado);
@@ -342,19 +500,102 @@ export default function WelcomeScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.welcomeText}>¡Bienvenido!</Text>
-        <Text style={styles.nameText}>{user?.nombre} {user?.apellido}</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.welcomeText}>¡Bienvenido!</Text>
+          <Text style={styles.nameText}>{user?.nombre} {user?.apellido}</Text>
+        </View>
         <View style={styles.saldoContainer}>
           <Text style={styles.saldoLabel}>Saldo actual:</Text>
           <Text style={[styles.saldoMonto, { color: saldo >= 0 ? '#4CAF50' : '#FF6B6B' }]}>
             ${saldo.toFixed(2)}
           </Text>
         </View>
+        <TouchableOpacity
+          style={styles.userButton}
+          onPress={toggleMenu}
+        >
+          <MaterialIcons name="person" size={24} color="#4CAF50" />
+        </TouchableOpacity>
       </View>
 
-      {loadingDatos ? (
-        <ActivityIndicator size="large" color="#4CAF50" style={styles.loader} />
-      ) : (
+      {menuVisible && (
+        <TouchableOpacity
+          style={styles.menuOverlay}
+          activeOpacity={1}
+          onPress={toggleMenu}
+        >
+          <Animated.View
+            style={[
+              styles.menuContainer,
+              {
+                transform: [
+                  { scale: menuAnimation },
+                  {
+                    translateY: menuAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-20, 0],
+                    }),
+                  },
+                ],
+                opacity: menuAnimation,
+              },
+            ]}
+          >
+            <View style={styles.menuHeader}>
+              <View style={styles.avatarContainer}>
+                <MaterialIcons name="person" size={32} color="#4CAF50" />
+              </View>
+              <Text style={styles.menuName}>{user?.nombre} {user?.apellido}</Text>
+              <Text style={styles.menuEmail}>{user?.gmail}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.signOutButton}
+              onPress={handleSignOut}
+            >
+              <MaterialIcons name="logout" size={24} color="#FFF" />
+              <Text style={styles.signOutText}>Cerrar sesión</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      )}
+
+      <ScrollView style={styles.content}>
+        {loadingDatos ? (
+          <ActivityIndicator size="large" color="#4CAF50" style={styles.loader} />
+        ) : (
+          <View style={styles.graficosContainer}>
+            <View style={styles.graficoSeccion}>
+              <Text style={styles.tituloGrafico}>Ingresos</Text>
+              {datosIngresos.length > 0 ? (
+                renderGraficoExponencial(
+                  datosIngresos,
+                  datosIngresos.reduce((acc, curr) => acc + curr.monto, 0)
+                )
+              ) : (
+                <View style={styles.noDataContainer}>
+                  <MaterialIcons name="show-chart" size={48} color="#CCC" />
+                  <Text style={styles.noDataText}>No hay datos de ingresos</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.graficoSeccion}>
+              <Text style={styles.tituloGrafico}>Egresos</Text>
+              {datosEgresos.length > 0 ? (
+                renderGraficoExponencial(
+                  datosEgresos,
+                  datosEgresos.reduce((acc, curr) => acc + curr.monto, 0)
+                )
+              ) : (
+                <View style={styles.noDataContainer}>
+                  <MaterialIcons name="show-chart" size={48} color="#CCC" />
+                  <Text style={styles.noDataText}>No hay datos de egresos</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
         <FlatList
           data={transacciones}
           renderItem={renderTransaccion}
@@ -369,7 +610,7 @@ export default function WelcomeScreen() {
             </View>
           }
         />
-      )}
+      </ScrollView>
 
       <TouchableOpacity
         style={styles.fab}
@@ -390,10 +631,14 @@ export default function WelcomeScreen() {
               styles.modalContainer,
               {
                 transform: [
-                  { scale: modalScale },
-                  { translateY: modalTranslateY }
-                ]
-              }
+                  { scale: animation },
+                  { translateY: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50, 0],
+                  }),
+                  },
+                ],
+              },
             ]}
           >
             <View style={styles.modalHeader}>
@@ -545,16 +790,95 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E9ECEF',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  headerLeft: {
+    flex: 1,
   },
   welcomeText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#4CAF50',
+    color: '#333',
   },
   nameText: {
     fontSize: 16,
     color: '#666',
     marginTop: 4,
+  },
+  userButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 16,
+  },
+  menuOverlay: {
+    position: 'absolute',
+    top: 60, 
+    right: 16,
+    left: 16,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
+  },
+  menuContainer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 24,
+    width: 280,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  menuHeader: {
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  avatarContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  menuName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 8,
+  },
+  menuEmail: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  signOutButton: {
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#FF6B6B',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF',
+    marginLeft: 8,
   },
   saldoContainer: {
     marginTop: 12,
@@ -794,5 +1118,104 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 32,
+  },
+  graficosContainer: {
+    paddingVertical: 16,
+    backgroundColor: '#FFF',
+    marginBottom: 16,
+  },
+  graficoSeccion: {
+    marginBottom: 24,
+  },
+  tituloGrafico: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  graficoWrapper: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  graficoExponencial: {
+    position: 'relative',
+    marginBottom: 24,
+    backgroundColor: '#FFF',
+  },
+  ejeX: {
+    position: 'absolute',
+    height: 1,
+    backgroundColor: '#E0E0E0',
+  },
+  ejeY: {
+    position: 'absolute',
+    width: 1,
+    backgroundColor: '#E0E0E0',
+    left: 20,
+  },
+  lineaVertical: {
+    position: 'absolute',
+    width: 2,
+    opacity: 0.7,
+  },
+  puntoDatos: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#FFF',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  etiquetaCategoria: {
+    position: 'absolute',
+    width: 80,
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#666',
+    transform: [{ rotate: '-45deg' }],
+  },
+  leyendaGrafico: {
+    width: '100%',
+  },
+  itemLeyenda: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 16,
+  },
+  colorLeyenda: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  textoLeyenda: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+  },
+  porcentajeLeyenda: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+  },
+  noDataContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  noDataText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 8,
+  },
+  content: {
+    flex: 1,
   },
 });
